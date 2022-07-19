@@ -261,6 +261,7 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
             return;
         }
 
+        // NOTE: job queue出队,当队列为空时返回undefined，然后跳出递归
         const job = this.jobQueue.shift();
 
         if (job === undefined) {
@@ -281,6 +282,7 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         }
 
         // Check if the job needs to be delayed due to sameDomainDelay
+        // NOTE: domain访问速率控制
         if (this.options.sameDomainDelay !== 0 && domain !== undefined) {
             const lastDomainAccess = this.lastDomainAccesses.get(domain);
             if (lastDomainAccess !== undefined
@@ -294,6 +296,7 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         }
 
         // Check are all positive, let's actually run the job
+        // NOTE: 记录去重url、域名访问时间搓
         if (this.options.skipDuplicateUrls && url !== undefined) {
             this.duplicateCheckUrls.add(url);
         }
@@ -304,11 +307,13 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         const worker = this.workersAvail.shift() as Worker<JobData, ReturnData>;
         this.workersBusy.push(worker);
 
+        // NOTE: 实例化workers，但不能超过设定的并发数量
         if (this.workersAvail.length !== 0 || this.allowedToStartWorker()) {
             // we can execute more work in parallel
             this.work();
         }
 
+        // NOTE: job里面没有taskfunc 就会使用全局cluster的taskfunc
         let jobFunction;
         if (job.taskFunction !== undefined) {
             jobFunction = job.taskFunction;
@@ -354,11 +359,13 @@ export default class Cluster<JobData = any, ReturnData = any> extends EventEmitt
         this.waitForOneResolvers = [];
 
         // add worker to available workers again
+        // NOTE: 在workersBusy删除进入工作并且完成的workers,然后再回收到workersAvail
         const workerIndex = this.workersBusy.indexOf(worker);
         this.workersBusy.splice(workerIndex, 1);
 
         this.workersAvail.push(worker);
-
+        
+        // NOTE: 再次递归循环执行 
         this.work();
     }
 
